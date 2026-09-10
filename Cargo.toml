@@ -1,40 +1,39 @@
 # Its own workspace root, so this repository builds on its own.
-#
-# Every module repository carries this and the template did not, which stopped
-# mattering the moment the template stopped sitting beside the estate: nested at
-# template/rust, cargo walked up, found the root workspace and refused to build.
-#
-# It would have bitten a generated repository the same way. A template that does
-# not obey the estate's rules produces repositories that start out breaking
-# them — doc/governance/rust-style.md section 4.
 [workspace]
 
 [package]
-name = "xmip-template-rust"
+name = "xmip-core-route-content"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/IlleNilsson/xmip-template-rust"
-description = "Starter template for a Rust Xmip module repository."
+repository = "https://github.com/IlleNilsson/xmip-core-route-content"
+description = "Content route technology: `content:<language>:<expression>` follows a dot or JSONPath path into the first section's content through xmip-core-path and reads the scalar it finds. A xmip-core-route technology."
 publish = false
 
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+# A Technology depends on its parent Capability, never the reverse
+# (repository-model.md). The Source trait lives in route and takes a Message.
+route = { package = "xmip-core-route", git = "https://github.com/IlleNilsson/xmip-core-route", branch = "main" }
+message = { package = "xmip-core-message", git = "https://github.com/IlleNilsson/xmip-core-message", branch = "main" }
+xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
+# The path capability and the two languages a property may name.
+path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
+path_dot = { package = "xmip-core-path-dot", git = "https://github.com/IlleNilsson/xmip-core-path-dot", branch = "main" }
+path_jsonpath = { package = "xmip-core-path-jsonpath", git = "https://github.com/IlleNilsson/xmip-core-path-jsonpath", branch = "main" }
+
+[dev-dependencies]
+# Only the tests build a Message from its parts.
+context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
+stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
+
 [lints.rust]
-# forbid, not deny: a module has no business writing unsafe. The one exception
-# in the estate is xmip-core-abi, which holds the extern "C" vtable over
-# include/xmip_module.h and lowers this to deny with a reason at the call site.
 unsafe_code = "forbid"
 
 [lints.clippy]
-# Warned, never denied. doc/governance/rust-style.md section 3: a function
-# length gate was tried in this estate's PowerShell and produced a sixteen-entry
-# waiver list while catching nothing. The number worth reading is branches, and
-# clippy prints both.
 too_many_lines = "warn"
-
-# The ones that catch real defects rather than taste.
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
