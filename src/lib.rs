@@ -7,12 +7,13 @@
 //! `content:<language>:<expression>` runs the path language `<language>` over
 //! the first section's Stream through `xmip-core-path` and reads the scalar it
 //! finds — `content:dot:order.total` in the Xmip content selector,
-//! `content:jsonpath:$.order.total` in RFC 9535. The scalar reads as the text
-//! a filter compares; a JSON `null` reads as nothing promoted; a Message with
-//! no section has no content and promotes nothing. A language this technology
-//! does not carry, content the language cannot parse, or a path that lands on
-//! an object or an array rather than a value, is an error with the engine's
-//! own reason. ADR-0046.
+//! `content:jsonpath:$.order.total` in RFC 9535. The scalar reads through
+//! `route::routable`, as a context value does: as the text a filter compares,
+//! a JSON `null` absent, bytes refused (ADR-0046, amended 2026-09-24). A
+//! Message with no section has no content and promotes nothing. A language
+//! this technology does not carry, content the language cannot parse, or a
+//! path that lands on an object or an array rather than a value, is an error
+//! with the engine's own reason.
 //!
 //! Two languages, because the content route reads JSON today: `dot` through
 //! `xmip-core-path-dot` and `jsonpath` through `xmip-core-path-jsonpath`. A
@@ -25,7 +26,6 @@ use path::{Path, PathEngine};
 use path_dot::{DotEngine, DotStructure};
 use path_jsonpath::{JsonPathEngine, JsonPathStructure};
 use route::{Source, SourceError};
-use xcore::ScalarValue;
 
 /// The manifest leaf and the prefix a property carries.
 pub const TECHNOLOGY: &str = "content";
@@ -85,17 +85,7 @@ impl Source for ContentSource {
         }
         .map_err(|e| refuse(e.to_string()))?;
 
-        match found {
-            None | Some(ScalarValue::Null) => Ok(None),
-            Some(ScalarValue::Binary(bytes)) => Err(refuse(format!(
-                "{expression} is {} bytes, and bytes are not routable as text",
-                bytes.len()
-            ))),
-            Some(ScalarValue::Text(text)) => Ok(Some(text)),
-            Some(ScalarValue::Bool(flag)) => Ok(Some(flag.to_string())),
-            Some(ScalarValue::Integer(number)) => Ok(Some(number.to_string())),
-            Some(ScalarValue::Decimal(number)) => Ok(Some(number.to_string())),
-        }
+        route::routable(expression, found.as_ref()).map_err(refuse)
     }
 }
 
