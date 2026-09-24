@@ -18,7 +18,6 @@ path = "src/lib.rs"
 # (repository-model.md). The Source trait lives in route and takes a Message.
 route = { package = "xmip-core-route", git = "https://github.com/IlleNilsson/xmip-core-route", branch = "main" }
 message = { package = "xmip-core-message", git = "https://github.com/IlleNilsson/xmip-core-message", branch = "main" }
-xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 # The path capability and the two languages a property may name.
 path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
 path_dot = { package = "xmip-core-path-dot", git = "https://github.com/IlleNilsson/xmip-core-path-dot", branch = "main" }
@@ -28,6 +27,7 @@ path_jsonpath = { package = "xmip-core-path-jsonpath", git = "https://github.com
 # Only the tests build a Message from its parts.
 context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
 stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
+xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 
 [lints.rust]
 unsafe_code = "forbid"
