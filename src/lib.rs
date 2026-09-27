@@ -94,7 +94,6 @@ mod tests {
     use super::*;
     use context::MessageContext;
     use message::{MessageSection, MessageTreatment};
-    use route::{Predicate, Value};
     use stream::Stream;
     use xcore::{MessageId, SectionId, StreamId};
 
@@ -208,9 +207,10 @@ mod tests {
         assert_eq!(promoted.get("content:dot:order.total"), Some("1500"));
         assert_eq!(promoted.get("content:jsonpath:$.order.note"), None);
         assert!(
-            Predicate::greater_than("content:dot:order.total", Value::Integer(1000))
-                .test(&promoted)
-                .passed()
+            path::expression::Expression::parse("\"content:dot:order.total\" > 1000")
+                .expect("compiles")
+                .evaluate(&promoted)
+                .holds()
         );
     }
 }
