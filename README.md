@@ -1,6 +1,6 @@
 # xmip-core-route-content
 
-Content route technology: `content:<language>:<expression>` follows a dot or JSONPath path into the first section's content through xmip-core-path and reads the scalar it finds. A technology of [xmip-core-route](https://github.com/IlleNilsson/xmip-core-route).
+Content route technology: `content:<language>:<expression>` follows a path, compiled once through the xmip-core-path engine in whichever language it carries, into the first section's content, parsed once per Message, and reads the scalar it finds. A technology of [xmip-core-route](https://github.com/IlleNilsson/xmip-core-route).
 
 ## Toolchain
 

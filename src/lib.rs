@@ -10,82 +10,71 @@
 //! `content:jsonpath:$.order.total` in RFC 9535. The scalar reads through
 //! `route::routable`, as a context value does: as the text a filter compares,
 //! a JSON `null` absent, bytes refused (ADR-0046, amended 2026-09-24). A
-//! Message with no section has no content and promotes nothing. A language
-//! this technology does not carry, content the language cannot parse, or a
-//! path that lands on an object or an array rather than a value, is an error
-//! with the engine's own reason.
+//! Message with no section has no content and promotes nothing.
 //!
-//! Two languages, because the content route reads JSON today: `dot` through
-//! `xmip-core-path-dot` and `jsonpath` through `xmip-core-path-jsonpath`. A
-//! third is one more arm in [`ContentSource::read`], not a new shape.
+//! **Once.** The languages are the ones the [`PathEngine`] this source is
+//! configured with carries; nothing here names any of them. Each property's
+//! path is compiled through that engine once, when the filter is, and a
+//! language the engine does not carry, or an expression it refuses, is
+//! refused then. The content is parsed once per Message into each form its
+//! paths read, however many properties read it (`path::Content`), so
+//! `content:dot:a` and `content:jsonpath:$.b` share one JSON parse. Content
+//! the language cannot parse, or a path that lands on an object or an array
+//! rather than a value, is an error with the engine's own reason.
 //!
 //! A route technology does not decide anything: it reads.
 
 use message::Message;
-use path::{Path, PathEngine};
-use path_dot::{DotEngine, DotStructure};
-use path_jsonpath::{JsonPathEngine, JsonPathStructure};
-use route::{Source, SourceError};
+use path::{CompiledPath, Content, Path, PathEngine};
+use route::{Reading, Source};
 
 /// The manifest leaf and the prefix a property carries.
 pub const TECHNOLOGY: &str = "content";
 
-/// The path languages this technology carries, in the order the crate
-/// documentation gives them.
-pub const LANGUAGES: [&str; 2] = ["dot", "jsonpath"];
+/// Reads `content:<language>:<expression>` from the first section's content,
+/// in the languages its engine carries.
+pub struct ContentSource {
+    engine: PathEngine,
+}
 
-/// Reads `content:<language>:<expression>` from the first section's content.
-pub struct ContentSource;
+impl ContentSource {
+    /// A source reading the languages `engine` carries.
+    #[must_use]
+    pub const fn new(engine: PathEngine) -> Self {
+        Self { engine }
+    }
+}
 
 impl Source for ContentSource {
     fn technology(&self) -> &'static str {
         TECHNOLOGY
     }
 
-    fn read(&self, message: &Message, name: &str) -> Result<Option<String>, SourceError> {
+    fn compile(&self, name: &str) -> Result<Box<dyn Reading>, String> {
         let Some((language, expression)) = name.split_once(':') else {
-            return Err(SourceError::new(
-                TECHNOLOGY,
-                name,
-                "a property is content:<language>:<expression>",
-            ));
+            return Err("a property is content:<language>:<expression>".to_string());
         };
         if expression.is_empty() {
-            return Err(SourceError::new(
-                TECHNOLOGY,
-                name,
-                "an expression is needed after the language",
-            ));
+            return Err("an expression is needed after the language".to_string());
         }
+        let path = self
+            .engine
+            .compile(&Path::new(language, expression))
+            .map_err(|refused| refused.message)?;
+        Ok(Box::new(Compiled(path)))
+    }
+}
 
-        let Some(section) = message.sections().first() else {
+/// A property's path, compiled.
+struct Compiled(CompiledPath);
+
+impl Reading for Compiled {
+    fn read(&self, _: &Message, content: Option<&Content<'_>>) -> Result<Option<String>, String> {
+        let Some(content) = content else {
             return Ok(None);
         };
-        let stream = &section.stream;
-        let path = Path::new(language, expression);
-        let refuse = |reason: String| SourceError::new(TECHNOLOGY, name, reason);
-
-        let found = match language {
-            "dot" => {
-                let structure = DotStructure::parse(stream).map_err(|e| refuse(e.to_string()))?;
-                DotEngine.read(&structure, &path)
-            }
-            "jsonpath" => {
-                let structure =
-                    JsonPathStructure::parse(stream).map_err(|e| refuse(e.to_string()))?;
-                JsonPathEngine.read(&structure, &path)
-            }
-            other => {
-                return Err(refuse(format!(
-                    "{other} is not a path language this technology carries; the languages \
-                     are {}",
-                    LANGUAGES.join(" and ")
-                )));
-            }
-        }
-        .map_err(|e| refuse(e.to_string()))?;
-
-        route::routable(expression, found.as_ref()).map_err(refuse)
+        let found = self.0.read(content).map_err(|refused| refused.message)?;
+        route::routable(&self.0.path().expression, found.as_ref())
     }
 }
 
@@ -93,9 +82,15 @@ impl Source for ContentSource {
 mod tests {
     use super::*;
     use context::MessageContext;
+    use contract::ContractError;
     use message::{MessageSection, MessageTreatment};
+    use path::{CompiledExpression, Form, PathLanguage, Rewriting};
+    use path_dot::DotLanguage;
+    use path_jsonpath::JsonPathLanguage;
+    use route::{Gathering, Promoted, SourceError};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use stream::Stream;
-    use xcore::{MessageId, SectionId, StreamId};
+    use xcore::{MessageId, ScalarValue, SectionId, StreamId};
 
     const ORDER: &[u8] = br#"{"order": {"id": "A-1", "total": 1500, "weight": 2.5,
         "paid": false, "note": null, "lines": [{"sku": "X"}, {"sku": "Y"}]}}"#;
@@ -119,8 +114,26 @@ mod tests {
         )
     }
 
+    fn json() -> ContentSource {
+        ContentSource::new(PathEngine::new(vec![
+            Box::new(DotLanguage),
+            Box::new(JsonPathLanguage),
+        ]))
+    }
+
+    fn promote(message: &Message, properties: &[&str]) -> Result<Promoted, SourceError> {
+        Gathering::new(&[&json()], properties).promote(message)
+    }
+
+    fn read_from(message: &Message, name: &str) -> Result<Option<String>, SourceError> {
+        let property = format!("content:{name}");
+        Ok(promote(message, &[property.as_str()])?
+            .get(&property)
+            .map(str::to_string))
+    }
+
     fn read(name: &str) -> Result<Option<String>, SourceError> {
-        ContentSource.read(&message(ORDER), name)
+        read_from(&message(ORDER), name)
     }
 
     #[test]
@@ -165,41 +178,88 @@ mod tests {
             MessageContext::new(),
             MessageTreatment::default(),
         );
-        assert_eq!(
-            ContentSource
-                .read(&empty, "dot:order.id")
-                .expect("no content"),
-            None
-        );
+        assert_eq!(read_from(&empty, "dot:order.id").expect("no content"), None);
     }
 
     #[test]
-    fn an_unknown_language_a_bad_property_and_content_that_is_not_a_value_are_refused() {
+    fn an_unloaded_language_a_bad_property_and_content_that_is_not_a_value_are_refused() {
         let language = read("xpath:/order/id").expect_err("no xpath");
         assert_eq!(language.technology, "content");
-        assert!(language.reason.contains("dot and jsonpath"));
+        assert!(
+            language.reason.contains("the languages are dot, jsonpath"),
+            "{}",
+            language.reason
+        );
 
         let shape = read("order.id").expect_err("no language");
         assert!(shape.reason.contains("content:<language>:<expression>"));
         assert!(read("dot:").is_err());
+        assert!(read("dot:lines[").is_err(), "refused as it compiles");
 
         let not_scalar = read("dot:order.lines").expect_err("an array");
         assert!(not_scalar.reason.contains("not a scalar"));
 
-        let broken = ContentSource
-            .read(&message(b"{not json"), "dot:order.id")
-            .expect_err("not JSON");
+        let broken = read_from(&message(b"{not json"), "dot:order.id").expect_err("not JSON");
         assert!(broken.reason.contains("not valid JSON"));
     }
 
-    #[test]
-    fn the_technology_is_content_and_promote_reads_the_prefixed_property() {
-        assert_eq!(ContentSource.technology(), "content");
+    /// A language that reads the Stream's length through a form counting
+    /// how often it is parsed.
+    struct Measured;
 
-        let sources: [&dyn Source; 1] = [&ContentSource];
-        let promoted = route::promote(
+    struct Length(usize);
+
+    static PARSED: AtomicUsize = AtomicUsize::new(0);
+
+    impl Form for Length {
+        fn parse(stream: &Stream) -> Result<Self, ContractError> {
+            PARSED.fetch_add(1, Ordering::Relaxed);
+            Ok(Self(stream.len()))
+        }
+    }
+
+    impl PathLanguage for Measured {
+        fn language(&self) -> &'static str {
+            "length"
+        }
+
+        fn compile(&self, _: &str) -> Result<Box<dyn CompiledExpression>, ContractError> {
+            Ok(Box::new(Self))
+        }
+    }
+
+    impl CompiledExpression for Measured {
+        fn read(&self, content: &Content<'_>) -> Result<Option<ScalarValue>, ContractError> {
+            let length = i64::try_from(content.form::<Length>()?.0).unwrap_or(i64::MAX);
+            Ok(Some(ScalarValue::Integer(length)))
+        }
+
+        fn write(&self, _: &mut Rewriting, _: ScalarValue) -> Result<(), ContractError> {
+            Err(ContractError::new("read-only"))
+        }
+    }
+
+    #[test]
+    fn content_is_parsed_once_per_message_however_many_properties_read_it() {
+        let source = ContentSource::new(PathEngine::new(vec![Box::new(Measured)]));
+        let gathering = Gathering::new(
+            &[&source],
+            &["content:length:a", "content:length:b", "content:length:c"],
+        );
+        let order = message(ORDER);
+        for _ in 0..100 {
+            let promoted = gathering.promote(&order).expect("readable");
+            assert_eq!(promoted.len(), 3);
+        }
+        assert_eq!(PARSED.load(Ordering::Relaxed), 100, "once per Message");
+    }
+
+    #[test]
+    fn the_technology_is_content_and_the_gathering_reads_the_prefixed_property() {
+        assert_eq!(json().technology(), "content");
+
+        let promoted = promote(
             &message(ORDER),
-            &sources,
             &["content:dot:order.total", "content:jsonpath:$.order.note"],
         )
         .expect("readable");

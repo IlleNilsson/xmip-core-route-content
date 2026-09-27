@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/IlleNilsson/xmip-core-route-content"
-description = "Content route technology: `content:<language>:<expression>` follows a dot or JSONPath path into the first section's content through xmip-core-path and reads the scalar it finds. A xmip-core-route technology."
+description = "Content route technology: `content:<language>:<expression>` follows a path, compiled once through the xmip-core-path engine in whichever language it carries, into the first section's content, parsed once per Message, and reads the scalar it finds. A xmip-core-route technology."
 publish = false
 
 [lib]
@@ -18,12 +18,17 @@ path = "src/lib.rs"
 # (repository-model.md). The Source trait lives in route and takes a Message.
 route = { package = "xmip-core-route", git = "https://github.com/IlleNilsson/xmip-core-route", branch = "main" }
 message = { package = "xmip-core-message", git = "https://github.com/IlleNilsson/xmip-core-message", branch = "main" }
-# The path capability and the two languages a property may name.
+# The path capability: the one engine a property's path compiles through,
+# carrying whichever languages configuration loads, and the content parsed
+# once per Message.
 path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
-path_dot = { package = "xmip-core-path-dot", git = "https://github.com/IlleNilsson/xmip-core-path-dot", branch = "main" }
-path_jsonpath = { package = "xmip-core-path-jsonpath", git = "https://github.com/IlleNilsson/xmip-core-path-jsonpath", branch = "main" }
 
 [dev-dependencies]
+# The two JSON languages the tests load into the engine.
+path_dot = { package = "xmip-core-path-dot", git = "https://github.com/IlleNilsson/xmip-core-path-dot", branch = "main" }
+path_jsonpath = { package = "xmip-core-path-jsonpath", git = "https://github.com/IlleNilsson/xmip-core-path-jsonpath", branch = "main" }
+# The error a test language refuses with.
+contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main" }
 # Only the tests build a Message from its parts.
 context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
 stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
