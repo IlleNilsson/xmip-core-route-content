@@ -22,26 +22,34 @@
 //! the language cannot parse, or a path that lands on an object or an array
 //! rather than a value, is an error with the engine's own reason.
 //!
+//! **Namespaces.** A prefix in a property's path is bound by the namespaces
+//! the source is built with, the table configured beside the filter, and
+//! never by the content it reads (ADR-0066, amendment 2026-11-08); a prefix
+//! the table does not bind is refused as the filter compiles.
+//!
 //! A route technology does not decide anything: it reads.
 
 use message::Message;
-use path::{CompiledPath, Content, Path, PathEngine};
+use path::{CompiledPath, Content, Namespaces, Path, PathEngine};
 use route::{Reading, Source};
 
 /// The manifest leaf and the prefix a property carries.
 pub const TECHNOLOGY: &str = "content";
 
 /// Reads `content:<language>:<expression>` from the first section's content,
-/// in the languages its engine carries.
+/// in the languages its engine carries, its prefixes bound by its
+/// namespaces.
 pub struct ContentSource {
     engine: PathEngine,
+    namespaces: Namespaces,
 }
 
 impl ContentSource {
-    /// A source reading the languages `engine` carries.
+    /// A source reading the languages `engine` carries, a prefix in a path
+    /// bound by `namespaces`.
     #[must_use]
-    pub const fn new(engine: PathEngine) -> Self {
-        Self { engine }
+    pub const fn new(engine: PathEngine, namespaces: Namespaces) -> Self {
+        Self { engine, namespaces }
     }
 }
 
@@ -59,7 +67,7 @@ impl Source for ContentSource {
         }
         let path = self
             .engine
-            .compile(&Path::new(language, expression))
+            .compile(&Path::new(language, expression).with_namespaces(self.namespaces.clone()))
             .map_err(|refused| refused.message)?;
         Ok(Box::new(Compiled(path)))
     }
@@ -115,10 +123,10 @@ mod tests {
     }
 
     fn json() -> ContentSource {
-        ContentSource::new(PathEngine::new(vec![
-            Box::new(DotLanguage),
-            Box::new(JsonPathLanguage),
-        ]))
+        ContentSource::new(
+            PathEngine::new(vec![Box::new(DotLanguage), Box::new(JsonPathLanguage)]),
+            Namespaces::new(),
+        )
     }
 
     fn promote(message: &Message, properties: &[&str]) -> Result<Promoted, SourceError> {
@@ -223,7 +231,12 @@ mod tests {
             "length"
         }
 
-        fn compile(&self, _: &str) -> Result<Box<dyn CompiledExpression>, ContractError> {
+        fn compile(
+            &self,
+            _: &str,
+            namespaces: &Namespaces,
+        ) -> Result<Box<dyn CompiledExpression>, ContractError> {
+            namespaces.unused_by(self.language())?;
             Ok(Box::new(Self))
         }
     }
@@ -240,8 +253,22 @@ mod tests {
     }
 
     #[test]
+    fn the_sources_namespaces_reach_the_language_a_path_is_compiled_by() {
+        let source = ContentSource::new(
+            PathEngine::new(vec![Box::new(Measured)]),
+            Namespaces::new().bind("o", "urn:example:order"),
+        );
+        let refused = source
+            .compile("length:a")
+            .map(drop)
+            .expect_err("length has none");
+        assert_eq!(refused, "length has no namespaces, and the path binds o");
+    }
+
+    #[test]
     fn content_is_parsed_once_per_message_however_many_properties_read_it() {
-        let source = ContentSource::new(PathEngine::new(vec![Box::new(Measured)]));
+        let source =
+            ContentSource::new(PathEngine::new(vec![Box::new(Measured)]), Namespaces::new());
         let gathering = Gathering::new(
             &[&source],
             &["content:length:a", "content:length:b", "content:length:c"],
