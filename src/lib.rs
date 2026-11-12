@@ -13,7 +13,9 @@
 //! Message with no section has no content and promotes nothing.
 //!
 //! **Once.** The languages are the ones the [`PathEngine`] this source is
-//! configured with carries; nothing here names any of them. Each property's
+//! configured with carries; nothing here names any of them but where a
+//! build links one by its feature, which [`ContentSource::linked`] carries:
+//! the one list of them a build makes. Each property's
 //! path is compiled through that engine once, when the filter is, and a
 //! language the engine does not carry, or an expression it refuses, is
 //! refused then. The content is parsed once per Message into each form its
@@ -50,6 +52,24 @@ impl ContentSource {
     #[must_use]
     pub const fn new(engine: PathEngine, namespaces: Namespaces) -> Self {
         Self { engine, namespaces }
+    }
+
+    /// The source over every path language this build links, by its
+    /// features — `edi`, a segment, element and component of an EDIFACT or
+    /// X12 interchange — with no prefix bound: the one place the list is
+    /// made, which `xmip-service` hands the node it starts and a reader that
+    /// predicts a node's routes calls alike (ADR-0046, amendment 2026-11-11).
+    #[must_use]
+    #[allow(
+        unused_mut,
+        clippy::vec_init_then_push,
+        reason = "each push is a feature this build may leave out"
+    )]
+    pub fn linked() -> Self {
+        let mut languages: Vec<Box<dyn path::PathLanguage>> = Vec::new();
+        #[cfg(feature = "edi")]
+        languages.push(Box::new(path_edi::EdiLanguage));
+        Self::new(PathEngine::new(languages), Namespaces::new())
     }
 }
 
@@ -299,5 +319,32 @@ mod tests {
                 .evaluate(&promoted)
                 .holds()
         );
+    }
+
+    /// The one list of the languages a build links: what it carries reads,
+    /// what it left out is refused as the filter compiles.
+    #[test]
+    fn the_linked_source_carries_the_languages_the_build_links_and_no_other() {
+        let linked = ContentSource::linked();
+        assert_eq!(linked.technology(), TECHNOLOGY);
+        assert!(linked.compile("dot:order.id").is_err(), "never linked here");
+        assert_eq!(
+            linked.compile("edi:UNH/2/1").is_ok(),
+            cfg!(feature = "edi"),
+            "the message type, where the build links edi"
+        );
+    }
+
+    #[cfg(feature = "edi")]
+    #[test]
+    fn an_edifact_interchange_is_routed_by_its_message_type_and_recipient() {
+        const ORDERS: &[u8] = b"UNA:+.? 'UNB+UNOC:3+PARTY-A:ZZZ+ESSENTIALS:ZZZ+261111:1200+1'\
+UNH+1+ORDERS:D:24A:UN'BGM+220+PO-1+9'UNT+3+1'UNZ+1+1'";
+        let source = ContentSource::linked();
+        let sources: [&dyn Source; 1] = [&source];
+        let gathering = Gathering::new(&sources, &["content:edi:UNH/2/1", "content:edi:UNB/3/1"]);
+        let promoted = gathering.promote(&message(ORDERS)).expect("readable");
+        assert_eq!(promoted.get("content:edi:UNH/2/1"), Some("ORDERS"));
+        assert_eq!(promoted.get("content:edi:UNB/3/1"), Some("ESSENTIALS"));
     }
 }

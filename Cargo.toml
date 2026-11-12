@@ -22,6 +22,15 @@ message = { package = "xmip-core-message", git = "https://github.com/IlleNilsson
 # carrying whichever languages configuration loads, and the content parsed
 # once per Message.
 path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
+# The path languages a build links, each by its feature, which
+# `ContentSource::linked` carries: the one list of them (ADR-0046, amendment
+# 2026-11-11).
+path_edi = { package = "xmip-core-path-edi", git = "https://github.com/IlleNilsson/xmip-core-path-edi", branch = "main", optional = true }
+
+[features]
+# `edi`: a segment, element and component of an EDIFACT or X12 interchange,
+# `content:edi:UNH/2/1` the message type.
+edi = ["dep:path_edi"]
 
 [dev-dependencies]
 # The two JSON languages the tests load into the engine.
