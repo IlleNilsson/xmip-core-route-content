@@ -338,13 +338,13 @@ mod tests {
     #[cfg(feature = "edi")]
     #[test]
     fn an_edifact_interchange_is_routed_by_its_message_type_and_recipient() {
-        const ORDERS: &[u8] = b"UNA:+.? 'UNB+UNOC:3+PARTY-A:ZZZ+ESSENTIALS:ZZZ+261111:1200+1'\
+        const ORDERS: &[u8] = b"UNA:+.? 'UNB+UNOC:3+PARTY-A:ZZZ+SYSTEM-TEST:ZZZ+261111:1200+1'\
 UNH+1+ORDERS:D:24A:UN'BGM+220+PO-1+9'UNT+3+1'UNZ+1+1'";
         let source = ContentSource::linked();
         let sources: [&dyn Source; 1] = [&source];
         let gathering = Gathering::new(&sources, &["content:edi:UNH/2/1", "content:edi:UNB/3/1"]);
         let promoted = gathering.promote(&message(ORDERS)).expect("readable");
         assert_eq!(promoted.get("content:edi:UNH/2/1"), Some("ORDERS"));
-        assert_eq!(promoted.get("content:edi:UNB/3/1"), Some("ESSENTIALS"));
+        assert_eq!(promoted.get("content:edi:UNB/3/1"), Some("SYSTEM-TEST"));
     }
 }
