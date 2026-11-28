@@ -13,16 +13,16 @@ path = "src/lib.rs"
 [dependencies]
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The Source trait lives in route and takes a Message.
-route = { package = "xmip-core-route", git = "https://github.com/IlleNilsson/xmip-core-route", branch = "main" }
-message = { package = "xmip-core-message", git = "https://github.com/IlleNilsson/xmip-core-message", branch = "main" }
+route = { workspace = true }
+message = { workspace = true }
 # The path capability: the one engine a property's path compiles through,
 # carrying whichever languages configuration loads, and the content parsed
 # once per Message.
-path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
+path = { workspace = true }
 # The path languages a build links, each by its feature, which
 # `ContentSource::linked` carries: the one list of them (ADR-0046, amendment
 # 2026-11-11).
-path_edi = { package = "xmip-core-path-edi", git = "https://github.com/IlleNilsson/xmip-core-path-edi", branch = "main", optional = true }
+path_edi = { workspace = true, optional = true }
 
 [features]
 # `edi`: a segment, element and component of an EDIFACT or X12 interchange,
@@ -30,15 +30,17 @@ path_edi = { package = "xmip-core-path-edi", git = "https://github.com/IlleNilss
 edi = ["dep:path_edi"]
 
 [dev-dependencies]
+# The tests write a filter as its expression.
+expression = { workspace = true }
 # The two JSON languages the tests load into the engine.
-path_dot = { package = "xmip-core-path-dot", git = "https://github.com/IlleNilsson/xmip-core-path-dot", branch = "main" }
-path_jsonpath = { package = "xmip-core-path-jsonpath", git = "https://github.com/IlleNilsson/xmip-core-path-jsonpath", branch = "main" }
+path_dot = { workspace = true }
+path_jsonpath = { workspace = true }
 # The error a test language refuses with.
-contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main" }
+contract = { workspace = true }
 # Only the tests build a Message from its parts.
-context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
-stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
-xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
+context = { workspace = true }
+stream = { workspace = true }
+xcore = { workspace = true }
 
 [lints]
 workspace = true

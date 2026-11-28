@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(promoted.get("content:dot:order.total"), Some("1500"));
         assert_eq!(promoted.get("content:jsonpath:$.order.note"), None);
         assert!(
-            path::expression::Expression::parse("\"content:dot:order.total\" > 1000")
+            expression::Expression::parse("\"content:dot:order.total\" > 1000")
                 .expect("compiles")
                 .evaluate(&promoted)
                 .holds()
